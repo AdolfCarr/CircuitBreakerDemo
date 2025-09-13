@@ -1,0 +1,233 @@
+========================
+PROJECT: ./
+========================
+===== POM.xml =====
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>co.com.coding.togegher</groupId>
+    <artifactId>CircuitBreakerDemo</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.0.6</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>2.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+===== JAVA: src/main/java/co/com/coding/togegher/MainApplication.java =====
+package co.com.coding.togegher;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestTemplate;
+
+
+@SpringBootApplication
+public class MainApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(MainApplication.class, args);
+    }
+
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
+}
+
+===== JAVA: src/main/java/co/com/coding/togegher/controller/PaymentController.java =====
+package co.com.coding.togegher.controller;
+
+import co.com.coding.togegher.service.IPaymentService;
+import co.com.coding.togegher.service.PaymentService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class PaymentController {
+
+    private final IPaymentService paymentService;
+
+    @Autowired
+    public PaymentController(PaymentService paymentService) {
+        this.paymentService = paymentService;
+    }
+
+    @GetMapping("/processPayment")
+    @CircuitBreaker(name = "processPayment", fallbackMethod = "fallbackMethod")
+    public String processPayment() throws Exception {
+            return paymentService.processPayment();
+    }
+
+
+
+    public String fallbackMethod(Throwable throwable) {
+        return "Lo sentimos, actualmente estamos experimentando dificultades técnicas para procesar pagos en línea. Por favor, inténtalo de nuevo más tarde. Agradecemos tu paciencia y comprensión.";
+    }
+}
+
+===== JAVA: src/main/java/co/com/coding/togegher/manager/IPaymentManager.java =====
+package co.com.coding.togegher.manager;
+
+public interface IPaymentManager {
+
+    String processPayment() throws Exception;
+
+}
+
+
+===== JAVA: src/main/java/co/com/coding/togegher/manager/PaymentManager.java =====
+package co.com.coding.togegher.manager;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
+
+
+@Component
+public class PaymentManager implements IPaymentManager {
+
+
+    private RestTemplate restTemplate;
+
+    @Autowired
+    public PaymentManager(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    @Override
+    public String processPayment() throws Exception {
+        try {
+            restTemplate.getForEntity("https://www.google.com", String.class);
+            return "Pago procesado correctamente";
+        } catch (Exception ex) {
+            throw ex;
+        }
+
+
+    }
+}
+
+
+===== JAVA: src/main/java/co/com/coding/togegher/service/IPaymentService.java =====
+package co.com.coding.togegher.service;
+
+public interface IPaymentService {
+
+    String processPayment() throws Exception;
+
+}
+
+
+===== JAVA: src/main/java/co/com/coding/togegher/service/PaymentService.java =====
+package co.com.coding.togegher.service;
+
+import co.com.coding.togegher.manager.IPaymentManager;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class PaymentService implements IPaymentService {
+
+    private IPaymentManager paymentManager;
+
+    @Autowired
+    public PaymentService(IPaymentManager paymentManager) {
+        this.paymentManager = paymentManager;
+    }
+
+    @Override
+    public String processPayment() throws Exception{
+        return paymentManager.processPayment();
+    }
+}
+
+
+===== RESOURCE: src/main/resources/application.properties =====
+server.port=8080
+server.servlet.context-path=/circuit-breaker-demo
+
+jackson.serialization.indent_output=true
+
+management.endpoints.web.exposure.include=*
+management.endpoint.health.show-details=always
+management.health.circuitbreakers.enabled=true
+
+# Apply default config to this specific instance
+resilience4j.circuitbreaker.instances.processPayment.base-config=default
+
+resilience4j.circuitbreaker.configs.default.registerHealthIndicator=true
+resilience4j.circuitbreaker.configs.default.slidingWindowSize=10
+resilience4j.circuitbreaker.configs.default.minimumNumberOfCalls=5
+resilience4j.circuitbreaker.configs.default.permittedNumberOfCallsInHalfOpenState=3
+resilience4j.circuitbreaker.configs.default.automaticTransitionFromOpenToHalfOpenEnabled=true
+resilience4j.circuitbreaker.configs.default.waitDurationInOpenState=5s
+resilience4j.circuitbreaker.configs.default.failureRateThreshold=50
+resilience4j.circuitbreaker.configs.default.eventConsumerBufferSize=10
+
+
